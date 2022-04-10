@@ -72,17 +72,15 @@ void receive_from_client(int connfd)
 
     n = read(connfd, buf, MAXBUF);
     strcpy(clientbuf, buf);
-    //printf("Received msg: %s\n", buf);
+    printf("Received msg: %s\n", buf);
 
     // declare variables
     struct ReceiveHeader receive_header;
     struct SendHeader send_head;
     struct hostent *remoteHost;
     struct sockaddr_in clientaddr;
-    receive_header.port = -1;
 
-
-    int i = check_and_handle_valid_http_request(buf, &receive_header, &send_head, &remoteHost);
+    int i = check_and_handle_valid_http_request(buf, &receive_header, &send_head, remoteHost);
     // if invalid request return error message
     if(i == 0){
         bzero(buf, MAXBUF);
@@ -109,11 +107,14 @@ void receive_from_client(int connfd)
     uri_parsing(receive_header.req_uri, hostname, path, &port);
     receive_header.path = path;
     receive_header.host = hostname;
+    receive_header.port = &port;
 
     printf("Page is not in cache. Sending request to server...%s\n", receive_header.host);
-    int serverfd = open_sendfd(receive_header.host, receive_header.port);
+    int serverfd = open_sendfd(receive_header.host, *receive_header.port);
     if (serverfd == -1){
+        printf("Failed - sending 404\n");
         bzero(buf, MAXBUF);
+        get_error_header(&send_head);
         char * t = header_to_buf(&send_head);
         strcpy(buf, t);  
         write(connfd, buf, strlen(buf));
@@ -195,31 +196,9 @@ int open_sendfd(char *hostname, int port){
     struct hostent rh;
     struct hostent *remoteHost = &rh;
 
-    // // open new socket to connect to server
-    // if ((serverfd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
-	// 	return -1;
-	// }
-
-    // hostent *remoteHost = get_ip_from_hostname_cache(hostname, remoteHost);
-    // if(IP == NULL){
-    //     printf("Querying hostname: %s\n", hostname);
-    //     remoteHost = gethostbyname(hostname);
-    //     if(remoteHost == NULL){
-    //         return -1;
-    //     }
-
-    //     // set request address
-    //     bzero((char *) &serveraddr, sizeof(serveraddr));
-    //     bcopy((char *)remoteHost->h_addr_list[0], (char *)&serveraddr.sin_addr.s_addr, remoteHost->h_length);
-
-    //     // add to Hostname IP cache
-    //     add_to_ip_cache(remoteHost, hostname);
-    // }
-    // else{
-    //     bzero((char *) &serveraddr, sizeof(serveraddr));
-    //     bcopy((char *)IP, (char *)&serveraddr.sin_addr.s_addr, strlen(IP));
-    // }
-
+    /* Create a socket descriptor */
+    if ((serverfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+        return -1;
 
     // if hostname not in cache, resolve and add to cache
     char * IP = get_ip_from_hostname_cache(hostname);
@@ -238,30 +217,43 @@ int open_sendfd(char *hostname, int port){
         add_to_ip_cache(remoteHost, hostname);
     }
     else{
-        hlength = get_hlength_from_hostname_cache(hostname)
+        short * hlength = get_hlength_from_hostname_cache(hostname);
         bzero((char *) &serveraddr, sizeof(serveraddr));
         bcopy((char *)IP, (char *)&serveraddr.sin_addr.s_addr, hlength);
     }
 
     // construct server struct
-    serveraddr.sin_family = AF_INET;   
+    serveraddr.sin_family = AF_INET;  
+     
     if(port > 0){
         serveraddr.sin_port = htons(port);
     }
     else{
-        serveraddr.sin_port = htons(80);
+        
+        serveraddr.sin_port = htons(990);
     }
- 
+
+    // printf("Port: %d\n", port);
     // printf("Hostname: %s\n", remoteHost->h_name);
-    // printf("Address: %d\n", remoteHost->h_addr_list[0]);
+    // printf("hlength: %d\n", remoteHost->h_length);
+
+    // printf("ip: ");
+    // for (int i = 0; i < remoteHost->h_length; i++) {
+    //     printf("%d", (unsigned char)remoteHost->h_addr_list[0][i]);
+    //     if (i != remoteHost->h_length - 1) printf(".");
+    // }
+    // printf("\n");
+    
 
     // establish connection
     int sockid = connect(serverfd, (struct sockaddr*)&serveraddr, sizeof(serveraddr));
     if (sockid < 0){
+        perror("Error: ");
+        printf("Connection failed\n");
 		return -1;
 	}
 
-    //printf("Socket connected\n");
+    printf("Socket connected\n");
 
     return serverfd;
 }
@@ -283,11 +275,11 @@ int check_and_handle_valid_http_request(char * request_msg, struct ReceiveHeader
     // check if valid request
     
     receive_header->host = hostname;
-    receive_header->port = port;
+    receive_header->port = &port;
     receive_header->path = path;
 
     // if no hostname, populate error, return 
-    if(hostname == NULL){
+    if(strcmp(hostname, "") == 1){
         get_error_header(send_head);
         return 0;
     }

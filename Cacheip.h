@@ -17,6 +17,3 @@ void delete_cache();
 struct cache_ip * head;
 
 #endif
-
-GET http://netsys.cs.colorado.edu/ HTTP/1.0
-
