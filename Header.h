@@ -3,6 +3,14 @@
 #ifndef _HEADER_H_
 #define _HEADER_H_
 
+struct arg_struct {
+    int arg1;
+    int arg2;
+};
+
+int timeout;
+
+
 struct ReceiveHeader {
     // required fields
     char * req_method;  // GET or POST
@@ -36,6 +44,7 @@ struct ReceiveHeader * new_default();
 struct SendHeader * send_default();
 struct SendHeader * error();
 
+void * timeout_thread(void * path);
 void add_to_cache(char * msg, int msg_bytes, struct ReceiveHeader *clientrec);
 void get_error_header(struct SendHeader * head_val);
 int check_and_handle_valid_http_request(char * request_msg, struct ReceiveHeader * receive_header, struct SendHeader * send_head, struct hostent *remoteHost);
@@ -45,7 +54,7 @@ int open_sendfd(char *hostname, int port);
 int open_listenfd(int port);
 
 void echo(int connfd, int * keep_alive_ptr);
-void *thread(void *vargp);
+void *thread(void * args);
 char * put_in_header(char * token, int * index);
 void create_header(struct SendHeader * send_header, struct ReceiveHeader * head, FILE * fp);
 char * header_to_buf(struct SendHeader * send_header);

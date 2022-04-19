@@ -16,7 +16,7 @@
 #define MAXBUF   8192  /* max I/O buffer size */
 #define SMALLBUF  1000
 #define LISTENQ  1024
-#define MAXFILEBUF 100000
+#define MAXFILEBUF 10000
 
 char * hash_func(unsigned char *str){
     unsigned long hash = 5381;
@@ -31,10 +31,6 @@ char * hash_func(unsigned char *str){
 
 // add to cache
 void add_to_cache(char * msg, int msg_bytes, struct ReceiveHeader *clientrec){
-    // parse response
-    //struct ReceiveHeader receive_header;
-    
-    //parse_header(msg, &receive_header);
     char filename[MAXFILEBUF];
     bzero(filename, MAXFILEBUF);
 
@@ -42,9 +38,7 @@ void add_to_cache(char * msg, int msg_bytes, struct ReceiveHeader *clientrec){
     char * hash = hash_func(filename);
       
     char **endptr;
-    //int len=strtol(receive_header.content_length, endptr, 10)+4;
-    printf("Length saving: %d\n", msg_bytes);
-    //int len2 = strlen(msg);
+    // printf("Length saving: %d\n", msg_bytes);
 
     // printf("\n\nMessage:\n%s\n\n", msg);
     // printf("Length of message: %d\n", len2);
@@ -59,6 +53,14 @@ void add_to_cache(char * msg, int msg_bytes, struct ReceiveHeader *clientrec){
     fwrite(msg, 1, msg_bytes, fp);
     fclose(fp);
     printf("Webpage added to cache.\n");
+
+    if(timeout != -1){
+        pthread_t tid;
+        char * mempath = malloc(strlen(path));
+        bzero(mempath, strlen(path));
+        strcpy(mempath, path);
+        pthread_create(&tid, NULL, timeout_thread, mempath);
+    }
 }
 
 

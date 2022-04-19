@@ -17,51 +17,88 @@
 #define MAXLINE  8192  /* max text line length */
 #define MAXBUF   8192  /* max I/O buffer size */
 #define LISTENQ  1024  /* second argument to listen() */
-#define MAXFILEBUF 100000
+#define MAXFILEBUF 60000
 
 int open_listenfd(int port);
-void receive_from_client(int connfd);
-void *thread(void *vargp);
+void receive_from_client(int connfd, int *timeout);
+
+
 
 int main(int argc, char **argv) 
 {
     head = NULL;
+    struct arg_struct args;
     int listenfd, *connfdp, port, clientlen=sizeof(struct sockaddr_in);
     struct sockaddr_in clientaddr;
     pthread_t tid; 
+    timeout = -1;
 
-    if (argc != 2) {
+    if ((argc != 2) & (argc != 3)) {
 	fprintf(stderr, "usage: %s <port>\n", argv[0]);
 	exit(0);
     }
     port = atoi(argv[1]);
+    
+    if(argc == 3){
+        timeout = atoi(argv[2]);
+    }
 
     listenfd = open_listenfd(port);
+    args.arg2 = timeout;
     while (1) {
         connfdp = malloc(sizeof(int));
         *connfdp = accept(listenfd, (struct sockaddr*)&clientaddr, &clientlen);
-        pthread_create(&tid, NULL, thread, connfdp);
+        args.arg1 = *connfdp;
+        
+        pthread_create(&tid, NULL, thread, (void *)&args);
     }
 
     delete_cache();
 }
 
-/* thread routine */
-void * thread(void * vargp) 
+/* thread routine for managing cache and implementing timeout */
+void * timeout_thread(void * args) 
 {  
-    int connfd = *((int *)vargp);
+    char * arg = (char *)args;
+    char path[MAXBUF];
+    bzero(path, MAXBUF);
+    strcpy(path, arg);
+    printf("Path: %s\n", path);
     pthread_detach(pthread_self()); 
-    free(vargp);
+    free(args);
 
-    receive_from_client(connfd);
+    time_t expiration = timeout + time(NULL);
+    time_t now;
+    while(1){
+        now = time(NULL);
+        if(now >= expiration){
+            if(remove(path) == 0){
+                printf("File deleted from cache.\n");
+            }
+        }
+    }
+   
+    return NULL;
+}
+
+/* thread routine */
+void * thread(void * argument) 
+{  
+    struct arg_struct *args = argument;
+
+    int connfd = args->arg1;
+    int timeout = args->arg2;
+    pthread_detach(pthread_self()); 
+    //free(argument);
+
+    receive_from_client(connfd, timeout);
 
     close(connfd);
     printf("Connection closed.\n\n");
     return NULL;
 }
 
-
-void receive_from_client(int connfd) 
+void receive_from_client(int connfd, int *timeout) 
 {
     size_t n; 
     char buf[MAXBUF]; 
@@ -72,7 +109,6 @@ void receive_from_client(int connfd)
 
     n = read(connfd, buf, MAXBUF);
     strcpy(clientbuf, buf);
-    printf("Received msg: %s\n", buf);
 
     // declare variables
     struct ReceiveHeader receive_header;
@@ -109,9 +145,9 @@ void receive_from_client(int connfd)
     receive_header.host = hostname;
     receive_header.port = &port;
 
-    printf("Page is not in cache. Sending request to server...%s\n", receive_header.host);
+    printf("Page is not in cache.\n");
     int serverfd = open_sendfd(receive_header.host, *receive_header.port);
-    if (serverfd == -1){
+    if (serverfd < 0){
         printf("Failed - sending 404\n");
         bzero(buf, MAXBUF);
         get_error_header(&send_head);
@@ -121,6 +157,7 @@ void receive_from_client(int connfd)
         return;
     }
 
+    printf("Sending request to server...\n");
     // send request to server
     i = write(serverfd, clientbuf, strlen(clientbuf));
     if(i < 0){
@@ -132,17 +169,32 @@ void receive_from_client(int connfd)
         return;
     }
     
-    char cache_buf[MAXFILEBUF];
-    bzero(cache_buf, MAXFILEBUF);
+    // char cache_buf[MAXFILEBUF];
+    // bzero(cache_buf, MAXFILEBUF);
+    char *cache_buf = calloc(MAXFILEBUF,1);
+
     // read from socket
     bzero(buf, MAXBUF);
     
     int size = 0;
     while((n = read(serverfd, buf, MAXBUF)) > 0){
+        write(connfd, buf, n);
+        
+        // make sure allocated memory is large enough
+        if((cache_buf = realloc(cache_buf, size + n*sizeof(char))) == NULL){
+            printf("Error allocating memory to file\n");
+            close(serverfd);
+            bzero(buf, MAXBUF);
+            char * t = header_to_buf(&send_head);
+            strcpy(buf, t);  
+            write(connfd, buf, strlen(buf));
+            return;
+        }
+
         memcpy(cache_buf + size, buf, n);
         size+=n;
-
-        write(connfd, buf, n);
+        printf("Byte sum: %d\n\n", size);   
+        
     }
 
     printf("Bytes received: %d\n\n", size);
@@ -150,6 +202,8 @@ void receive_from_client(int connfd)
     
     //store file in cache
     add_to_cache(cache_buf, size, &receive_header);
+
+    free(cache_buf);
 }
 
 /* 
@@ -233,18 +287,7 @@ int open_sendfd(char *hostname, int port){
         serveraddr.sin_port = htons(990);
     }
 
-    // printf("Port: %d\n", port);
-    // printf("Hostname: %s\n", remoteHost->h_name);
-    // printf("hlength: %d\n", remoteHost->h_length);
-
-    // printf("ip: ");
-    // for (int i = 0; i < remoteHost->h_length; i++) {
-    //     printf("%d", (unsigned char)remoteHost->h_addr_list[0][i]);
-    //     if (i != remoteHost->h_length - 1) printf(".");
-    // }
-    // printf("\n");
-    
-
+    // printf("Connecting to socket...\n");
     // establish connection
     int sockid = connect(serverfd, (struct sockaddr*)&serveraddr, sizeof(serveraddr));
     if (sockid < 0){

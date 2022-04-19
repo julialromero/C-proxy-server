@@ -34,13 +34,15 @@ char * get_ip_from_hostname_cache(char * hostname){
 
     // search cache for hostname
     struct cache_ip * crawl = head;
-    while(head != NULL){
-        printf("Hostname: %s\n", crawl->hostname);
+    while(crawl != NULL){
+        // printf("DEBUG: Hostname: %s\n", crawl->hostname);
+        // printf("DEBUG: Hostname: %s\n", hostname);
         if(strcasecmp(crawl->hostname, hostname) == 0){
             printf("Host found in cache.\n");
             //bcopy((char *)remoteHost->h_addr_list[0], crawl->IP, remoteHost->h_length);
             return crawl->IP;
         }
+        
         crawl = crawl->next;
     }
 
