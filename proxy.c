@@ -27,6 +27,8 @@ void receive_from_client(int connfd, int *timeout);
 int main(int argc, char **argv) 
 {
     head = NULL;
+    blacklisthead = NULL;
+    load_blacklist();
     struct arg_struct args;
     int listenfd, *connfdp, port, clientlen=sizeof(struct sockaddr_in);
     struct sockaddr_in clientaddr;
@@ -54,6 +56,7 @@ int main(int argc, char **argv)
     }
 
     delete_cache();
+    delete_blacklisted();
 }
 
 /* thread routine for managing cache and implementing timeout */
@@ -116,6 +119,8 @@ void receive_from_client(int connfd, int *timeout)
     struct hostent *remoteHost;
     struct sockaddr_in clientaddr;
 
+
+    printf("Checking if valid\n");
     int i = check_and_handle_valid_http_request(buf, &receive_header, &send_head, remoteHost);
     // if invalid request return error message
     if(i == 0){
@@ -204,6 +209,15 @@ void receive_from_client(int connfd, int *timeout)
     add_to_cache(cache_buf, size, &receive_header);
 
     free(cache_buf);
+    free(receive_header.connection);
+    free(receive_header.content_length);
+    free(receive_header.content_type);
+    //free(receive_header.host);
+    free(receive_header.httpversion);
+    //free(receive_header.path);
+    //free(receive_header.port);
+    free(receive_header.req_method);
+    //free(receive_header.req_uri);
 }
 
 /* 
@@ -336,7 +350,14 @@ int check_and_handle_valid_http_request(char * request_msg, struct ReceiveHeader
         get_error_header(send_head);
         return 0;
     }
-    // printf("Remote host found.\n");
+
+    // check if blacklisted
+    int i = check_if_blacklisted(remoteHost);
+    if( i != 1){
+        printf("Site is blacklisted.\n");
+        get_forbidden_header(send_head);
+        return 0;
+    }
     
     // if valid, return true (1)
     return 1;

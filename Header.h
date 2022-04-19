@@ -68,7 +68,8 @@ int checkIfFileExists(char * filename);
 char * get_content_type(const char *filename);
 char * get_content_length(FILE * fp);
 void parse_header(char * request_msg, struct ReceiveHeader * head);
-    
+void get_forbidden_header(struct SendHeader * head_val);
+
 #endif
 
 

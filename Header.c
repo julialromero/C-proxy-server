@@ -63,8 +63,6 @@ void add_to_cache(char * msg, int msg_bytes, struct ReceiveHeader *clientrec){
     }
 }
 
-
-
 /*
     ADAPTED FROM https://github.com/sadiredd-sv/Proxy--Caching-web-proxy/blob/master/proxy.c
 */
@@ -144,6 +142,16 @@ void get_error_header(struct SendHeader * head_val){
     head_val->status_code = "400";
     head_val->content_length = "none";
     head_val->status_msg = "Internal Server Error";
+    head_val->msg = "none";
+}
+
+void get_forbidden_header(struct SendHeader * head_val){
+    head_val->httpversion = "HTTP/1.1";
+    head_val->connection = "none";
+    head_val->content_type = "none";
+    head_val->status_code = "403";
+    head_val->content_length = "none";
+    head_val->status_msg = "ERROR 403 Forbidden";
     head_val->msg = "none";
 }
 

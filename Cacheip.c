@@ -13,6 +13,8 @@
 #include "Header.h"
 #include "Cacheip.h"
 
+#define SMALLBUF  1000
+
 void add_to_ip_cache(struct hostent *remoteHost, char * hostname){
     char * IP = (char *)remoteHost->h_addr_list[0];
 
@@ -82,6 +84,78 @@ void delete_cache(){
         head = head->next;
         free(temp->hostname);
         free(temp->IP);
+        free(temp);
+    }
+    return;
+}
+
+int check_if_blacklisted(struct hostent * remoteHost){
+    char * IP = (char *)remoteHost->h_addr_list[0];
+    char * hostname = remoteHost->h_name;
+
+    struct blacklisted * crawl = blacklisthead;
+    while(crawl != NULL){
+        if((strcmp(crawl->hostval, IP) == 0) | (strcmp(crawl->hostval, hostname) == 0)){
+            return -1;
+        }
+        crawl = crawl->next;
+    }
+    return 1;
+}
+
+void load_blacklist(){
+    char * path = "blacklist.txt";
+    FILE * fp = fopen(path, "rb");
+    if(fp == NULL){
+        printf("Blacklist file not found\n");
+        return;
+    }
+
+    char * buf = NULL;
+    size_t len = 0;
+    ssize_t num_bytes;
+    while((num_bytes = getline(&buf, &len, fp)) != -1){
+        // get rid of newline
+        if (buf[num_bytes - 1] == '\n') 
+        {
+            buf[num_bytes - 1] = '\0';
+        }
+
+        // add node to linked list
+        struct blacklisted * new = (struct blacklisted *)malloc(sizeof(struct blacklisted));
+        new->hostval = malloc(num_bytes);
+        strcpy(new->hostval, buf);
+
+        new->next = blacklisthead;
+        blacklisthead = new;
+    }
+
+    fclose(fp);
+    if (buf){
+        free(buf);
+    }
+
+    //print_blacklisted();
+}
+
+void print_blacklisted(){
+    struct blacklisted * crawl = blacklisthead;
+    while(crawl != NULL){
+        printf("%s ", crawl->hostval);
+        crawl = crawl->next;
+    }
+    printf("\n");
+}
+
+void delete_blacklisted(){
+    if(blacklisthead == NULL){
+        return;
+    }
+    struct blacklisted * temp;
+    while(blacklisthead != NULL){
+        temp = blacklisthead;
+        blacklisthead = blacklisthead->next;
+        free(temp->hostval);
         free(temp);
     }
     return;
